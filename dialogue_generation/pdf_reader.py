@@ -6,6 +6,7 @@ import tempfile
 import subprocess
 from typing import List, Literal, Optional
 
+# ---------- 1) LangChain: UnstructuredPDFLoader ----------
 def pdf_to_text_unstructuredpdfloader(file_path: str) -> str:
     """
     LangChain UnstructuredPDFLoader로 텍스트 추출
@@ -23,7 +24,7 @@ def pdf_to_text_unstructuredpdfloader(file_path: str) -> str:
     docs = loader.load()
     return "\n\n".join(doc.page_content for doc in docs if doc.page_content)
 
-
+# ---------- 2) LangChain: PyMuPDFLoader ----------
 def pdf_to_text_pdfplumberloader(file_path: str) -> str:
     """
     LangChain PyMuPDFLoader로 텍스트 추출
@@ -69,7 +70,7 @@ def pdf_to_text_pdfplumberloader(file_path: str) -> str:
 #         docs.append(Document(page_content=text, metadata=meta))
 
 
-# ---------- 1) LangChain: PyMuPDFLoader ----------
+# ---------- 3) LangChain: PyMuPDFLoader ----------
 def pdf_to_text_pymupdf(file_path: str) -> str:
     """
     LangChain PyMuPDFLoader로 텍스트 추출
@@ -84,7 +85,7 @@ def pdf_to_text_pymupdf(file_path: str) -> str:
     return "\n\n".join(doc.page_content for doc in docs if doc.page_content)
 
 
-# ---------- 2) LangChain: PyPDFium2Loader ----------
+# ---------- 4) LangChain: PyPDFium2Loader ----------
 def pdf_to_text_pypdfium2(file_path: str) -> str:
     """
     LangChain PyPDFium2Loader로 텍스트 추출
@@ -94,136 +95,6 @@ def pdf_to_text_pypdfium2(file_path: str) -> str:
     loader = PyPDFium2Loader(file_path, extract_images=False)
     docs = loader.load()
     return "\n\n".join(doc.page_content for doc in docs if doc.page_content)
-
-
-# ---------- 3) OpenDataLoader-PDF ----------
-def pdf_to_text_opendataloader_pdf(
-    file_path: str,
-    prefer_format: Literal["markdown", "text", "html", "json"] = "markdown",
-    keep_line_breaks: bool = True,
-) -> str:
-    """
-    OpenDataLoader-PDF 사용 (로컬 Java 실행이 필요)
-    pip install -U opendataloader-pdf  # + Java 11+ 설치
-    레포: https://github.com/opendataloader-project/opendataloader-pdf
-    Python API: opendataloader_pdf.convert(input_path=[...], output_dir=..., format=[...])
-    """
-    import opendataloader_pdf  # type: ignore
-
-    out_dir = tempfile.mkdtemp(prefix="odl_pdf_")
-    # 텍스트 친화 포맷 우선 순위
-    formats = [prefer_format]
-    if prefer_format == "markdown":
-        formats += ["text"]  # 백업
-    elif prefer_format == "text":
-        formats += ["markdown"]
-
-    opendataloader_pdf.convert(
-        input_path=[file_path],
-        output_dir=out_dir,
-        format=formats,  # "json","html","pdf","text","markdown","markdown-with-html","markdown-with-images"
-        keep_line_breaks=keep_line_breaks,
-    )
-
-    # 출력 파일 찾기 (입력 파일명 기반)
-    stem = os.path.splitext(os.path.basename(file_path))[0]
-    # 포맷별 후보 확장자
-    candidates = []
-    for fmt in formats:
-        if fmt == "markdown":
-            candidates += [f"{stem}.md", f"{stem}.markdown"]
-        elif fmt == "text":
-            candidates += [f"{stem}.txt"]
-        elif fmt == "html":
-            candidates += [f"{stem}.html"]
-        elif fmt == "json":
-            candidates += [f"{stem}.json"]
-
-    # 결과 읽기
-    for name in candidates:
-        p = os.path.join(out_dir, name)
-        if os.path.exists(p):
-            if p.endswith(".json"):
-                with open(p, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                # JSON 구조에서 텍스트 비슷한 필드 풀어내기(간단 합치기)
-                return json.dumps(data, ensure_ascii=False, indent=2)
-            else:
-                with open(p, "r", encoding="utf-8") as f:
-                    return f.read()
-
-    # 실패 시 빈 문자열
-    return ""
-
-
-# ---------- 4) InternVL3.5 (VLM) ----------
-def pdf_to_text_internvl(
-    file_path: str,
-    model_id: str = "OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview",
-    device: Optional[str] = None,
-    max_pages: int = 10,
-    prompt: str = (
-        "You are an OCR assistant. Transcribe the page to plain text. "
-        "Preserve natural reading order; ignore decorative headers/footers."
-    ),
-) -> str:
-    """
-    InternVL3.5으로 각 페이지 이미지를 전사.
-    요구: transformers >= 4.55.0 (20B 계열), torch + GPU 권장.
-    모델 카드 노트: 20B 버전은 transformers>=4.55.0 필요.   [oai_citation:1‡Hugging Face](https://huggingface.co/OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview)
-
-    설치:
-      pip install -U transformers accelerate torch torchvision pillow pymupdf
-    """
-    import fitz  # PyMuPDF 페이지 렌더 (pip install pymupdf)
-    import torch
-    from PIL import Image
-    from transformers import AutoProcessor, AutoModelForCausalLM
-
-    # 디바이스 설정
-    if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    # 모델/프로세서 로드 (trust_remote_code 필요할 수 있음)
-    processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_id,
-        torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
-        device_map="auto" if device == "cuda" else None,
-        low_cpu_mem_usage=True,
-        trust_remote_code=True,
-    )
-    if device == "cpu":
-        model = model.to(device)
-
-    # PDF -> 이미지 페이지화
-    doc = fitz.open(file_path)
-    texts: List[str] = []
-    for i, page in enumerate(doc):
-        if i >= max_pages:
-            break
-        pix = page.get_pixmap(dpi=200)  # 품질/속도 절충
-        img = Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
-
-        # 프로세서로 패킹 (text + image)
-        inputs = processor(text=prompt, images=img, return_tensors="pt")
-        if device == "cuda":
-            inputs = {k: v.to(model.device) for k, v in inputs.items()}
-
-        with torch.inference_mode():
-            generated_ids = model.generate(
-                **inputs,
-                max_new_tokens=2048,
-                do_sample=False,
-                temperature=0.0,
-            )
-        out = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        # 일부 모델은 프롬프트를 포함해 반환하므로 프롬프트 제거 시도
-        page_text = out.replace(prompt, "").strip()
-        texts.append(f"[Page {i+1}]\n{page_text}")
-
-    return "\n\n".join(texts)
-
 
 # ---------- 5) ByteDance Dolphin ----------
 def pdf_to_text_dolphin(
