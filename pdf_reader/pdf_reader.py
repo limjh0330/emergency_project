@@ -99,7 +99,7 @@ def pdf_to_text_pypdfium2(file_path: str) -> str:
 # ---------- 5) ByteDance Dolphin ----------
 def pdf_to_text_dolphin(
     file_path: str,
-    model_dir: str = "./hf_model",  # huggingface-cli로 받은 ByteDance/Dolphin 로컬 경로
+    model_dir: str = "./pdf_reader/refer_model/hf_model",  # huggingface-cli로 받은 ByteDance/Dolphin 로컬 경로
     save_dir: Optional[str] = None,
     max_batch_size: int = 8,
     start_page: Optional[int] = None,
@@ -123,8 +123,7 @@ def pdf_to_text_dolphin(
         save_dir = tempfile.mkdtemp(prefix="dolphin_out_")
 
     candidate_paths = [
-        "./Dolphin/demo_page_hf.py",
-        "./demo_page_hf.py",
+        "./pdf_reader/refer_model/Dolphin/demo_page_hf.py",
     ]
     demo_script = None
     for p in candidate_paths:
@@ -148,8 +147,8 @@ def pdf_to_text_dolphin(
         cmd += ["--start_page", str(start_page)]
     if end_page is not None:
         cmd += ["--end_page", str(end_page)]
-        cmd = list(map(str, cmd))
-
+    
+    cmd = list(map(str, cmd))
     env = os.environ.copy()
     env["ACCELERATE_DISABLE_MIXED_PRECISION"] = "1"
 
@@ -210,20 +209,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--path",
-        default="/Users/lim/Desktop/Desktop/study/Master/Emergency project/dialogue_generation/pdf/KTAS.pdf",
+        default="/Users/lim/Desktop/Desktop/study/Master/Emergency project/pdf_reader/pdf/KTAS.pdf",
         help="입력 PDF 경로")
     parser.add_argument(
         "--method",
         choices=["unstructuredpdfloader","pdfplumberloader","pymupdf", "pypdfium2", "opendataloader", "internvl", "dolphin"],
-        default="dolphin",
+        default="pypdfium2",
     )
     parser.add_argument(
         "--out",
-        default="/Users/lim/Desktop/Desktop/study/Master/Emergency project/dialogue_generation/pdf_result",
+        default="/Users/lim/Desktop/Desktop/study/Master/Emergency project/pdf_reader/pdf_result",
         help="추출된 텍스트 저장 경로(.txt). 미지정 시 입력 PDF와 같은 경로에 .txt로 저장"
     )
     args = parser.parse_args()
-    start_page, end_page = 1,25
+    start_page, end_page = 1,5
     text = pdf_to_text(args.path, method=args.method, start_page=start_page, end_page=end_page)
     out_path = args.out+f"/{args.method}_{start_page}_{end_page}.txt"
     with open(out_path, "w", encoding="utf-8") as f:
