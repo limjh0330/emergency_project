@@ -46,3 +46,4 @@ def save_jsonl(chunks: List[Document], out_path: str) -> None:
 def docs_to_chunk(docs, path: str) -> None:
     chunks = chunk_docs(docs, chunk_size=1000, chunk_overlap=150)
     save_jsonl(chunks, path)
+
