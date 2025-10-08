@@ -82,7 +82,7 @@ def pdf_to_text_pymupdf(file_path: str) -> str:
 
     loader = PyMuPDFLoader(file_path, extract_images=False)
     docs = loader.load()  # 페이지별 Document 리스트
-    return "\n\n".join(doc.page_content for doc in docs if doc.page_content)
+    return "\n\n".join(doc for doc in docs)
 
 
 # ---------- 4) LangChain: PyPDFium2Loader ----------
@@ -94,7 +94,7 @@ def pdf_to_text_pypdfium2(file_path: str) -> str:
     from langchain_community.document_loaders import PyPDFium2Loader  # type: ignore
     loader = PyPDFium2Loader(file_path, extract_images=False)
     docs = loader.load()
-    return "\n\n".join(doc.page_content for doc in docs if doc.page_content)
+    return docs
 
 # ---------- 5) ByteDance Dolphin ----------
 def pdf_to_text_dolphin(
@@ -179,12 +179,41 @@ def pdf_to_text_dolphin(
 
     # 아무 것도 없으면 빈 문자열
     return ""
+# ---------- 6) Marker ----------
+# def pdf_to_text_marker(file_path: str, output_format: str = "markdown") -> str:
+#     """
+#     marker 라이브러리를 활용하여 PDF → 텍스트(또는 Markdown) 변환.
+#     marker는 PDF 레이아웃과 구조를 유지하며 텍스트를 추출할 수 있음.
 
+#     설치:
+#       pip install -U marker-pdf  # (공식: https://github.com/datalab-to/marker)
+
+#     매개변수:
+#       file_path : PDF 파일 경로
+#       output_format : 'markdown' | 'html' | 'text' | 'json'
+
+#     반환:
+#       변환된 텍스트 문자열
+#     """
+#     import os
+#     from marker.convert import convert_single_pdf
+
+#     if not os.path.exists(file_path):
+#         raise FileNotFoundError(f"PDF 파일을 찾을 수 없습니다: {file_path}")
+
+#     # 변환 수행 (marker는 내부적으로 PyMuPDF + ML 기반 PDF 구조 파서 사용)
+#     result = convert_single_pdf(file_path, format=output_format)
+
+#     # convert_single_pdf()는 변환 결과를 문자열 형태로 반환
+#     if isinstance(result, dict):
+#         # 일부 포맷(json 등)은 dict 형태로 반환됨 → JSON 문자열로 직렬화
+#         import json
+#         return json.dumps(result, ensure_ascii=False, indent=2)
+#     else:
+#         return str(result)
 
 # ---------- 공통 진입점 ----------
-Method = Literal["pymupdf", "pypdfium2", "opendataloader", "internvl", "dolphin"]
-
-def pdf_to_text(file_path: str, start_page, end_page, method: Method = "pymupdf") -> str:
+def pdf_to_docs(file_path: str, start_page = 1, end_page = 1000, method = "pypdfium2") -> str:
     if method == "unstructuredpdfloader":
         return pdf_to_text_unstructuredpdfloader(file_path)
     if method == "pdfplumberloader":
@@ -199,33 +228,6 @@ def pdf_to_text(file_path: str, start_page, end_page, method: Method = "pymupdf"
     #     return pdf_to_text_internvl(file_path)
     if method == "dolphin":
         return pdf_to_text_dolphin(file_path, start_page=start_page, end_page=end_page)
+    # if method == "marker":
+    #     return pdf_to_text_marker(file_path)
     raise ValueError(f"Unknown method: {method}")
-
-
-if __name__ == "__main__":
-    import argparse
-    from pathlib import Path
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--path",
-        default="/Users/lim/Desktop/Desktop/study/Master/Emergency project/pdf_reader/pdf/KTAS.pdf",
-        help="입력 PDF 경로")
-    parser.add_argument(
-        "--method",
-        choices=["unstructuredpdfloader","pdfplumberloader","pymupdf", "pypdfium2", "opendataloader", "internvl", "dolphin"],
-        default="pypdfium2",
-    )
-    parser.add_argument(
-        "--out",
-        default="/Users/lim/Desktop/Desktop/study/Master/Emergency project/pdf_reader/pdf_result",
-        help="추출된 텍스트 저장 경로(.txt). 미지정 시 입력 PDF와 같은 경로에 .txt로 저장"
-    )
-    args = parser.parse_args()
-    start_page, end_page = 1,5
-    text = pdf_to_text(args.path, method=args.method, start_page=start_page, end_page=end_page)
-    out_path = args.out+f"/{args.method}_{start_page}_{end_page}.txt"
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(text if text.endswith("\n") else text + "\n")
-
-    print(f"[INFO] 텍스트를 저장했습니다: {out_path}")
