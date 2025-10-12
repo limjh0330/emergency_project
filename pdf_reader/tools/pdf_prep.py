@@ -1,10 +1,6 @@
 from __future__ import annotations
+from typing import Optional
 import os
-import io
-import json
-import tempfile
-import subprocess
-from typing import List, Literal, Optional
 
 # ---------- 1) LangChain: UnstructuredPDFLoader ----------
 def pdf_to_text_unstructuredpdfloader(file_path: str) -> str:
@@ -180,37 +176,47 @@ def pdf_to_text_dolphin(
     # 아무 것도 없으면 빈 문자열
     return ""
 # ---------- 6) Marker ----------
-# def pdf_to_text_marker(file_path: str, output_format: str = "markdown") -> str:
-#     """
-#     marker 라이브러리를 활용하여 PDF → 텍스트(또는 Markdown) 변환.
-#     marker는 PDF 레이아웃과 구조를 유지하며 텍스트를 추출할 수 있음.
+def pdf_to_text_marker(file_path: str, output_format: str = "markdown") -> str:
+    """
+    marker 라이브러리를 활용하여 PDF → 텍스트(또는 Markdown) 변환.
+    marker는 PDF 레이아웃과 구조를 유지하며 텍스트를 추출할 수 있음.
 
-#     설치:
-#       pip install -U marker-pdf  # (공식: https://github.com/datalab-to/marker)
+    설치:
+      pip install -U marker-pdf  # (공식: https://github.com/datalab-to/marker)
 
-#     매개변수:
-#       file_path : PDF 파일 경로
-#       output_format : 'markdown' | 'html' | 'text' | 'json'
+    매개변수:
+      file_path : PDF 파일 경로
+      output_format : 'markdown' | 'html' | 'text' | 'json'
 
-#     반환:
-#       변환된 텍스트 문자열
-#     """
-#     import os
-#     from marker.convert import convert_single_pdf
+    반환:
+      변환된 텍스트 문자열
+    """
+    from marker.converters.pdf import PdfConverter
+    from marker.converters.table import TableConverter
+    from marker.models import create_model_dict
+    from marker.config.parser import ConfigParser
 
-#     if not os.path.exists(file_path):
-#         raise FileNotFoundError(f"PDF 파일을 찾을 수 없습니다: {file_path}")
+    config = {
+        "output_format": "json",
+        "force_layout_block": "Table"
+    }
+    config_parser = ConfigParser(config)
+    
+    converter = TableConverter(
+        config=config_parser.generate_config_dict(),
+        artifact_dict=create_model_dict()
+        )
+    result = converter("FILEPATH")
 
-#     # 변환 수행 (marker는 내부적으로 PyMuPDF + ML 기반 PDF 구조 파서 사용)
-#     result = convert_single_pdf(file_path, format=output_format)
-
-#     # convert_single_pdf()는 변환 결과를 문자열 형태로 반환
-#     if isinstance(result, dict):
-#         # 일부 포맷(json 등)은 dict 형태로 반환됨 → JSON 문자열로 직렬화
-#         import json
-#         return json.dumps(result, ensure_ascii=False, indent=2)
-#     else:
-#         return str(result)
+    # converter = PdfConverter(
+    #     config=config_parser.generate_config_dict(),
+    #     artifact_dict=create_model_dict(),
+    #     processor_list=config_parser.get_processors(),
+    #     renderer=config_parser.get_renderer(),
+    #     llm_service=config_parser.get_llm_service()
+    # )
+    # result = converter(file_path)
+    return result
 
 # ---------- 공통 진입점 ----------
 def pdf_to_docs(file_path: str, start_page = 1, end_page = 1000, method = "pypdfium2") -> str:
@@ -228,6 +234,6 @@ def pdf_to_docs(file_path: str, start_page = 1, end_page = 1000, method = "pypdf
     #     return pdf_to_text_internvl(file_path)
     if method == "dolphin":
         return pdf_to_text_dolphin(file_path, start_page=start_page, end_page=end_page)
-    # if method == "marker":
-    #     return pdf_to_text_marker(file_path)
+    if method == "marker":
+        return pdf_to_text_marker(file_path)
     raise ValueError(f"Unknown method: {method}")

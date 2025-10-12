@@ -1,5 +1,4 @@
 import argparse
-from pathlib import Path
 
 from path_setting import Settings
 from pipeline import prepare_chunks, build_index
@@ -15,10 +14,10 @@ def parse_args():
     parser.add_argument(
         "--method",
         choices=[
-            "unstructuredpdfloader","marker","pdfplumberloader",
-            "pymupdf","pypdfium2","opendataloader","internvl","dolphin"
+            "unstructuredpdfloader","marker","pypdfium2",
+            "pymupdf","pdfplumberloader","opendataloader","internvl","dolphin"
         ],
-        default="pypdfium2",
+        default="marker",
         help="PDF 로딩 방식"
     )
     parser.add_argument(
@@ -55,7 +54,7 @@ def main():
     assert pdf_path.exists(), f"PDF를 찾을 수 없습니다: {pdf_path}"
 
     # 1) 청크 준비 → JSONL 저장
-    jsonl_path = prepare_chunks(pdf_path, args.method, args.chunk_size, args.chunk_overlap,cfg)
+    jsonl_path = prepare_chunks(pdf_path, args.method, args.chunk_size, args.chunk_overlap, cfg)
 
     # 2) 인덱스 구축
     index_dir = build_index(jsonl_path, args.llm_model, cfg)

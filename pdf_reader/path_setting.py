@@ -15,6 +15,9 @@ class Settings:
     def jsonl_path(self, method: str) -> Path:
         return self.base_dir / self.result_dir_rel / f"{method}_chunks.jsonl"
 
+    def txt_path(self, method: str) -> Path:
+        return self.base_dir / self.result_dir_rel / f"{method}_raw.txt"
+    
     @property
     def index_dir(self) -> Path:
         return self.base_dir / self.index_dir_rel

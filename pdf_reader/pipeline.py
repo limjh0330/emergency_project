@@ -10,11 +10,25 @@ def prepare_chunks(pdf_path: Path, method: str, chunk_size:int, chunk_overlap:in
     docs = pdf_to_docs(str(pdf_path), method)
     chunks = chunk_docs(docs, chunk_size, chunk_overlap)
 
-    out = cfg.jsonl_path(method)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    save_jsonl(chunks, str(out))
-    print(f"[INFO] 청크 JSONL 저장: {out}")
-    return out
+    txt_save_path = cfg.txt_path(method)
+    txt_save_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    lines = []
+    for i, doc in enumerate(docs, start=1):
+        text = doc.page_content.strip() if getattr(doc, "page_content", None) else ""
+        meta = doc.metadata if hasattr(doc, "metadata") else {}
+        lines.append(f"### Document {i}\n[Metadata] {meta}\n\n{text}\n\n{'='*80}\n")
+    
+    with open(str(txt_save_path), "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    
+    print(f"[INFO] doc raw 정보 저장: {txt_save_path}")
+
+    jsonl_save_path = cfg.jsonl_path(method)
+    jsonl_save_path.parent.mkdir(parents=True, exist_ok=True)
+    save_jsonl(chunks, str(jsonl_save_path))
+    print(f"[INFO] 청크 JSONL 저장: {jsonl_save_path}")
+    return jsonl_save_path
 
 def build_index(jsonl_path: Path, llm_model:str, cfg: Settings) -> Path:
     """JSONL → FAISS 인덱스 구축. 인덱스 디렉터리 경로 반환."""
