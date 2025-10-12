@@ -1,44 +1,72 @@
+import argparse
 from pathlib import Path
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
 
-from pdf_prep import pdf_to_docs
-from rag_prep import chunk_docs, save_jsonl
-from make_index import build_faiss
+from path_setting import Settings
+from pipeline import prepare_chunks, build_index
+from tools.faiss_io import load_db, query
 
-if __name__ == "__main__":
-    import argparse
-
+def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--file",
-        default="/pdf_reader/pdf/KTAS.pdf",
-        help="입력 PDF")
+        default=None,  # None이면 Settings의 기본값 사용
+        help="입력 PDF 경로 (프로젝트 루트 기준 상대경로 또는 절대경로)"
+    )
     parser.add_argument(
         "--method",
-        choices=["unstructuredpdfloader","marker", "pdfplumberloader","pymupdf", "pypdfium2", "opendataloader", "internvl", "dolphin"],
+        choices=[
+            "unstructuredpdfloader","marker","pdfplumberloader",
+            "pymupdf","pypdfium2","opendataloader","internvl","dolphin"
+        ],
         default="pypdfium2",
+        help="PDF 로딩 방식"
     )
-    args = parser.parse_args()
-    project_root = str(Path(__file__).resolve().parents[1])
-    start_page, end_page = 1,5
+    parser.add_argument(
+        "--llm_model",
+        choices=[
+            "sentence-transformers/all-MiniLM-L6-v2",
+            "Qwen/Qwen3-Embedding-0.6B"
+        ],
+        default="Qwen/Qwen3-Embedding-0.6B",
+        help="LLM 모델 선택"
+    )
+    parser.add_argument(
+        "--chunk_size",
+        default=1000
+    )
+    parser.add_argument(
+        "--chunk_overlap",
+        default=150
+    )
+    parser.add_argument(
+        "--query",
+        default="KTAS 2단계 기준과 예시 증상은?",
+        help="테스트 질의"
+    )
+    parser.add_argument("--k", type=int, default=5, help="검색 상위 문서 수")
+    return parser.parse_args()
 
-    pdf_path = project_root + args.file
-    docs = pdf_to_docs(pdf_path, method=args.method)
-    chunks = chunk_docs(docs, chunk_size=1000, chunk_overlap=150)
-    jsonl_path = project_root+f"/pdf_reader/pdf_result/{args.method}_chunks.jsonl"
-    save_jsonl(chunks, jsonl_path)
-    print(f"[INFO] json 파일을 저장했습니다: {jsonl_path}")
+def main():
+    args = parse_args()
+    cfg = Settings()
 
-    index_dir = project_root + "/pdf_result/index/ktas_faiss"
-    model="sentence-transformers/all-MiniLM-L6-v2"
-    build_faiss(jsonl_path = jsonl_path, index_dir = index_dir, embed_model = model)
-    print(f"building FAISS for {jsonl_path}")
+    # 입력 PDF 경로 결정
+    pdf_path = cfg.pdf_path
+    assert pdf_path.exists(), f"PDF를 찾을 수 없습니다: {pdf_path}"
 
-    embed = HuggingFaceEmbeddings(model_name=model)
-    db = FAISS.load_local(index_dir, embed, allow_dangerous_deserialization=True)
+    # 1) 청크 준비 → JSONL 저장
+    jsonl_path = prepare_chunks(pdf_path, args.method, args.chunk_size, args.chunk_overlap,cfg)
 
-    query = "KTAS 2단계 기준과 예시 증상은?"
-    docs = db.similarity_search(query, k=5)
+    # 2) 인덱스 구축
+    index_dir = build_index(jsonl_path, args.llm_model, cfg)
+
+    # 3) 인덱스 로드 & 질의
+    db = load_db(index_dir, args.llm_model)
+    docs = query(db, args.query, k=args.k)
+
     for i, d in enumerate(docs, 1):
-        print(f"[{i}] {d.metadata} \n{d.page_content[:300]}...\n")
+        preview = d.page_content[:300].replace("\n", " ")
+        print(f"[{i}] {d.metadata}\n{preview}...\n")
+
+if __name__ == "__main__":
+    main()
